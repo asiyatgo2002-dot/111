@@ -16,6 +16,10 @@ log = logging.getLogger(__name__)
 MODEL = os.environ.get("MARKETPLACE_AGENT_MODEL", "claude-opus-5-5")
 
 
+def _sub(p: Product) -> str:
+    return f" [{p.subcategory}]" if p.subcategory else ""
+
+
 class Analyst:
     def __init__(self, model: str = MODEL):
         import anthropic
@@ -70,7 +74,8 @@ class Analyst:
         if not products:
             return products
         listing = "\n".join(
-            f"{i}. [{p.marketplace}] {p.name} | {p.brand} | {p.price:.0f} ₽" for i, p in enumerate(products)
+            f"{i}. [{p.marketplace}]{_sub(p)} {p.name} | {p.brand} | {p.price:.0f} ₽"
+            for i, p in enumerate(products)
         )
         schema = {
             "type": "object",
@@ -81,7 +86,8 @@ class Analyst:
         data = self._ask_json(
             "Ты аналитик маркетплейсов. Отбираешь товары, которые действительно соответствуют запросу.",
             f"Тема: «{topic}».\nНиже список товаров из поисковой выдачи. Верни номера тех, что являются "
-            "именно искомым товаром. Исключи аксессуары, запчасти, чехлы, комплектующие и товары другой "
+            "именно искомым товаром. Если у товара в квадратных скобках указана подкатегория, он должен "
+            "соответствовать именно ей. Исключи аксессуары, запчасти, чехлы, комплектующие и товары другой "
             "категории, попавшие в выдачу по рекламе.\n\n" + listing,
             schema,
         )
@@ -90,7 +96,7 @@ class Analyst:
 
     def summarize(self, topic: str, top: list[Product]) -> tuple[str, list[str]]:
         listing = "\n".join(
-            f"{i + 1}. [{p.marketplace}] {p.name} ({p.brand}) — {p.price:.0f} ₽, рейтинг {p.rating}, "
+            f"{i + 1}. [{p.marketplace}]{_sub(p)} {p.name} ({p.brand}) — {p.price:.0f} ₽, рейтинг {p.rating}, "
             f"отзывов {p.reviews}, продаж ≈{p.sales} ({p.sales_source}), балл {p.total_score}"
             for i, p in enumerate(top)
         )
@@ -108,7 +114,8 @@ class Analyst:
             f"Тема исследования: «{topic}». Итоговый топ по продажам и соотношению цена/качество:\n\n"
             f"{listing}\n\n"
             "1) summary — вывод на 4–7 предложений: ценовой диапазон лидеров, где выгоднее (Ozon или WB), "
-            "лучший выбор в бюджетном и среднем сегменте, на что обратить внимание.\n"
+            "лучший выбор в бюджетном и среднем сегменте, какие подкатегории продаются лучше всего (если они "
+            "указаны), на что обратить внимание.\n"
             f"2) comments — ровно {len(top)} коротких комментариев (до 15 слов), по одному на каждый товар "
             "в том же порядке: чем он выделяется.",
             schema,

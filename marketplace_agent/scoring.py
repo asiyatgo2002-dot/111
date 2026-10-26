@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from statistics import median
 
@@ -37,14 +38,37 @@ def dedupe(products: list[Product]) -> list[Product]:
     return list(seen.values())
 
 
-def filter_candidates(products: list[Product], cfg: ScoringConfig) -> list[Product]:
+def _normalize(text: str) -> str:
+    return text.strip().lower().replace("ё", "е")
+
+
+def _is_excluded(p: Product, exclude: dict[str, tuple[str, ...]]) -> bool:
+    prefixes = exclude.get(p.subcategory)
+    return bool(prefixes) and _normalize(p.name).startswith(prefixes)
+
+
+def _group_medians(products: list[Product]) -> dict[str, float]:
+    """Медианная цена по подкатегориям (без подкатегории — одна общая группа)."""
+    groups: dict[str, list[float]] = defaultdict(list)
+    for p in products:
+        groups[p.subcategory].append(p.price)
+    return {k: median(v) for k, v in groups.items()}
+
+
+def filter_candidates(products: list[Product], cfg: ScoringConfig,
+                      exclude: dict[str, tuple[str, ...]] | None = None) -> list[Product]:
+    """exclude — начала названий, которые отсекаются в подкатегории (аксессуары, комплектующие).
+    Сравнивается именно начало: тип товара маркетплейсы пишут первым словом, а «комплект
+    с наволочками» не должен отсекаться словом «наволочка»."""
+    exclude = exclude or {}
     ok = [
         p for p in products
         if p.price > 0 and (p.rating or 0) >= cfg.min_rating and p.reviews >= cfg.min_reviews
+        and not _is_excluded(p, exclude)
     ]
     if ok:
-        med = median(p.price for p in ok)
-        ok = [p for p in ok if p.price >= med * cfg.min_price_ratio]
+        med = _group_medians(ok)
+        ok = [p for p in ok if p.price >= med[p.subcategory] * cfg.min_price_ratio]
     return ok
 
 
@@ -65,9 +89,10 @@ def score(products: list[Product], cfg: ScoringConfig) -> list[Product]:
     bayes = [((p.rating or 0) * p.reviews + mean_rating * m) / (p.reviews + m) for p in products]
     quality = _minmax(bayes)
 
-    # Цена/качество: качество на рубль; цена логарифмируется, чтобы дешёвое не побеждало всегда
-    med_price = median(p.price for p in products)
-    value_raw = [q_b / (1 + math.log(p.price / med_price + 1)) for p, q_b in zip(products, bayes)]
+    # Цена/качество: качество на рубль; цена логарифмируется, чтобы дешёвое не побеждало всегда.
+    # Цена сравнивается с медианой своей подкатегории: полотенце не конкурирует по цене с одеялом.
+    med = _group_medians(products)
+    value_raw = [q_b / (1 + math.log(p.price / med[p.subcategory] + 1)) for p, q_b in zip(products, bayes)]
     value = _minmax(value_raw)
 
     sales = _minmax([math.log1p(p.sales or 0) for p in products])
@@ -81,3 +106,19 @@ def score(products: list[Product], cfg: ScoringConfig) -> list[Product]:
             (cfg.w_sales * s + cfg.w_value * v + cfg.w_quality * q) / total_w * 100, 1
         )
     return sorted(products, key=lambda p: p.total_score, reverse=True)
+
+
+def select_top(ranked: list[Product], n: int, max_per_subcategory: int = 0) -> list[Product]:
+    """Первые n товаров; при max_per_subcategory > 0 — не больше стольких из одной подкатегории,
+    чтобы топ категории не состоял из одного типа товаров."""
+    if max_per_subcategory <= 0:
+        return ranked[:n]
+    taken: Counter[str] = Counter()
+    top: list[Product] = []
+    for p in ranked:
+        if taken[p.subcategory] < max_per_subcategory:
+            top.append(p)
+            taken[p.subcategory] += 1
+            if len(top) == n:
+                break
+    return top

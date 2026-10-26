@@ -22,6 +22,7 @@ COLUMNS = [
     # (заголовок, ширина, формат, функция)
     ("№", 5, None, None),
     ("Маркетплейс", 13, None, lambda p: p.marketplace),
+    ("Категория", 18, None, lambda p: p.subcategory),
     ("Товар", 55, None, lambda p: p.name),
     ("Бренд", 16, None, lambda p: p.brand),
     ("Цена, ₽", 11, "#,##0", lambda p: p.price),
@@ -42,7 +43,9 @@ COLUMNS = [
 
 
 def _write_table(ws, products: list[Product], start_row: int = 1) -> None:
-    for col, (title, width, _, _) in enumerate(COLUMNS, 1):
+    # Колонка «Категория» нужна только в категорийном исследовании
+    columns = [c for c in COLUMNS if c[0] != "Категория" or any(p.subcategory for p in products)]
+    for col, (title, width, _, _) in enumerate(columns, 1):
         c = ws.cell(row=start_row, column=col, value=title)
         c.fill, c.font, c.border = HEADER_FILL, HEADER_FONT, BORDER
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -51,7 +54,7 @@ def _write_table(ws, products: list[Product], start_row: int = 1) -> None:
 
     for i, p in enumerate(products, 1):
         row = start_row + i
-        for col, (title, _, fmt, getter) in enumerate(COLUMNS, 1):
+        for col, (title, _, fmt, getter) in enumerate(columns, 1):
             value = i if getter is None else getter(p)
             c = ws.cell(row=row, column=col, value=value)
             c.border = BORDER
@@ -66,14 +69,14 @@ def _write_table(ws, products: list[Product], start_row: int = 1) -> None:
 
     last = start_row + len(products)
     if products:
-        total_col = get_column_letter(next(i for i, c in enumerate(COLUMNS, 1) if c[0] == "Итоговый балл"))
+        total_col = get_column_letter(next(i for i, c in enumerate(columns, 1) if c[0] == "Итоговый балл"))
         ws.conditional_formatting.add(
             f"{total_col}{start_row + 1}:{total_col}{last}",
             ColorScaleRule(start_type="min", start_color="F8696B", mid_type="percentile",
                            mid_value=50, mid_color="FFEB84", end_type="max", end_color="63BE7B"),
         )
     ws.freeze_panes = ws.cell(row=start_row + 1, column=4)
-    ws.auto_filter.ref = f"A{start_row}:{get_column_letter(len(COLUMNS))}{last}"
+    ws.auto_filter.ref = f"A{start_row}:{get_column_letter(len(columns))}{last}"
 
 
 def save_report(
@@ -87,6 +90,7 @@ def save_report(
     notes: list[str] | None = None,
     generated_at: datetime | None = None,
     top_n: int | None = None,
+    per_subcategory: int = 5,
 ) -> Path:
     generated_at = generated_at or datetime.now()
     top_n = top_n or len(top)
@@ -105,6 +109,14 @@ def save_report(
         if items:
             _write_table(wb.create_sheet(mp), items)
 
+    if any(p.subcategory for p in all_ranked):
+        # Лучшие товары каждой подкатегории — подкатегории по убыванию продаж лидеров
+        by_sub: dict[str, list[Product]] = {}
+        for p in all_ranked:
+            by_sub.setdefault(p.subcategory, []).append(p)
+        best = sorted(by_sub.values(), key=lambda items: max(i.sales or 0 for i in items), reverse=True)
+        _write_table(wb.create_sheet("По категориям"), [p for items in best for p in items[:per_subcategory]])
+
     _write_table(wb.create_sheet("Все кандидаты"), all_ranked)
 
     info = wb.create_sheet("Методика")
@@ -116,7 +128,8 @@ def save_report(
         ("Дата сбора", f"{generated_at:%d.%m.%Y %H:%M}"),
         ("Кандидатов после фильтров", len(all_ranked)),
         ("Фильтры", f"рейтинг ≥ {cfg.min_rating}, отзывов ≥ {cfg.min_reviews}, "
-                    f"цена ≥ {cfg.min_price_ratio:.0%} от медианы (отсев аксессуаров)"),
+                    f"цена ≥ {cfg.min_price_ratio:.0%} от медианы подкатегории, стоп-слова в начале названия "
+                    "(отсев аксессуаров)"),
         ("Итоговый балл", f"{cfg.w_sales:.0%} продажи + {cfg.w_value:.0%} цена/качество + "
                           f"{cfg.w_quality:.0%} качество (все баллы 0–100 внутри выборки)"),
         ("Продажи", "Wildberries — счётчик заказов карточки товара; Ozon — бейдж «купили» в выдаче. "
@@ -124,7 +137,8 @@ def save_report(
                     "(доля покупателей, оставляющих отзыв). Продажи по шкале логарифмические."),
         ("Качество", f"Байесовский рейтинг: оценка, сглаженная {cfg.prior_reviews} «виртуальными» отзывами "
                      "со средней оценкой выборки — мало отзывов = меньше доверия."),
-        ("Цена/качество", "Байесовский рейтинг, делённый на 1 + ln(цена / медиана + 1)."),
+        ("Цена/качество", "Байесовский рейтинг, делённый на 1 + ln(цена / медиана + 1). Медиана считается "
+                          "внутри подкатегории: полотенце не сравнивается по цене с одеялом."),
     ]
     if summary:
         rows.append(("Вывод ИИ-аналитика", summary))

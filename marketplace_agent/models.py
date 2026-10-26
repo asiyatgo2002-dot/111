@@ -17,6 +17,7 @@ class Product:
     sales: int | None = None  # продажи/заказы
     sales_source: str = ""  # откуда взято значение продаж
     query: str = ""
+    subcategory: str = ""  # подкатегория для категорийных исследований
 
     # заполняются при ранжировании
     quality_score: float = 0.0

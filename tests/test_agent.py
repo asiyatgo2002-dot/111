@@ -130,3 +130,19 @@ def test_select_top_cap():
     ranked = [Product("WB", str(i), "x", "u", 1, subcategory="A" if i < 5 else "B") for i in range(8)]
     assert [p.sku for p in select_top(ranked, 4, 2)] == ["0", "1", "5", "6"]
     assert len(select_top(ranked, 4, 0)) == 4
+
+
+def test_ozon_textds_name_and_variants():
+    from marketplace_agent.models import Product
+    from marketplace_agent.scoring import select_top
+    item = {"id": "123456", "action": {"link": "/product/pled-123456/"},
+            "mainState": [{"type": "priceV2", "priceV2": {"price": [{"text": "899 ₽"}]}},
+                          {"type": "textDS", "id": "name",
+                           "textDS": {"text": "Плед 150х200 GALTEX", "textColor": "textPrimary",
+                                      "preset": "PRESET_CUSTOM"}}]}
+    assert ozon.parse_item(item).name == "Плед 150х200 GALTEX"
+
+    a = Product("Ozon", "1", "Плед мокко", "u", price=800, rating=4.9, reviews=7000)
+    b = Product("Ozon", "2", "Плед графит", "u", price=850, rating=4.9, reviews=7004)
+    c = Product("Ozon", "3", "Одеяло", "u", price=1200, rating=4.9, reviews=9000)
+    assert [p.sku for p in select_top([a, b, c], 3)] == ["1", "3"]

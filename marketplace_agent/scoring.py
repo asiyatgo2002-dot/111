@@ -111,12 +111,17 @@ def score(products: list[Product], cfg: ScoringConfig) -> list[Product]:
 def select_top(ranked: list[Product], n: int, max_per_subcategory: int = 0) -> list[Product]:
     """Первые n товаров; при max_per_subcategory > 0 — не больше стольких из одной подкатегории,
     чтобы топ категории не состоял из одного типа товаров."""
-    if max_per_subcategory <= 0:
-        return ranked[:n]
     taken: Counter[str] = Counter()
+    variants: set[tuple] = set()
     top: list[Product] = []
     for p in ranked:
-        if taken[p.subcategory] < max_per_subcategory:
+        # на Ozon цвета/размеры одной карточки делят рейтинг и отзывы — в топ берём один вариант
+        variant = (p.rating, float(f"{p.reviews:.3g}"))
+        if p.marketplace == "Ozon" and p.reviews >= 1000 and variant in variants:
+            continue
+        if max_per_subcategory <= 0 or taken[p.subcategory] < max_per_subcategory:
+            if p.marketplace == "Ozon":
+                variants.add(variant)
             top.append(p)
             taken[p.subcategory] += 1
             if len(top) == n:

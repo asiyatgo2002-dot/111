@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from urllib.parse import quote
 
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 
 BASE = "https://www.ozon.ru"
 ENTRYPOINT = "/api/entrypoint-api.bx/page/json/v2?url="
+BLOCKS_PER_PAGE = 4
 
 _NUM = r"(\d[\d\s  \xa0]*)"
 RE_PRICE = re.compile(_NUM + r"\s*₽")
@@ -65,7 +67,9 @@ def parse_item(item: dict, query: str = "") -> Product | None:
     name = ""
     name_atom = _find_atom(main_state, atom_id="name")
     if name_atom:
-        name = " ".join(_texts(name_atom.get("textAtom") or name_atom)).strip()
+        # в новых версиях выдачи атом textDS содержит, кроме text, ещё и названия стилей
+        text_atom = name_atom.get("textAtom") or name_atom.get("textDS") or {}
+        name = (text_atom.get("text") or " ".join(_texts(text_atom or name_atom))).strip()
 
     prices: list[int] = []
     price_atom = _find_atom(main_state, atom_type="priceV2") or _find_atom(main_state, atom_type="priceWithTitle")
@@ -118,6 +122,16 @@ def parse_search_page(page_json: dict, query: str = "") -> list[Product]:
     return products
 
 
+def _next_page(page_json: dict) -> str | None:
+    for key, state in (page_json.get("widgetStates") or {}).items():
+        if key.startswith("infiniteVirtualPaginator"):
+            try:
+                return (json.loads(state) if isinstance(state, str) else state).get("nextPage")
+            except ValueError:
+                return None
+    return page_json.get("nextPage")
+
+
 class OzonClient:
     def __init__(self, headless: bool = True, timeout_ms: int = 45000):
         self.headless = headless
@@ -134,7 +148,10 @@ class OzonClient:
         products: list[Product] = []
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
-                headless=self.headless, args=["--disable-blink-features=AutomationControlled"]
+                headless=self.headless,
+                args=["--disable-blink-features=AutomationControlled"],
+                # свой Chromium вместо скачанного Playwright (например, в облачном окружении)
+                executable_path=os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or None,
             )
             ctx = browser.new_context(
                 locale="ru-RU",
@@ -151,8 +168,10 @@ class OzonClient:
             page.goto(BASE + search_path, wait_until="domcontentloaded")
             page.wait_for_timeout(4000)  # время на прохождение антибот-проверки
 
-            for n in range(1, pages + 1):
-                path = search_path + (f"&page={n}" if n > 1 else "")
+            # Ozon отдаёт выдачу блоками по 8 товаров; следующий блок — по ссылке nextPage
+            # из пагинатора. Одна «страница» агента — несколько таких блоков.
+            path = search_path
+            for n in range(1, pages * BLOCKS_PER_PAGE + 1):
                 data = page.evaluate(
                     """async (url) => {
                         const r = await fetch(url, {credentials: 'include'});
@@ -168,7 +187,10 @@ class OzonClient:
                 if not found:
                     break
                 products.extend(found)
-                page.wait_for_timeout(1500)
+                path = _next_page(data)
+                if not path:
+                    break
+                page.wait_for_timeout(1200)
             browser.close()
         if not products:
             raise RuntimeError(

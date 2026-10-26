@@ -1,0 +1,13 @@
+{"products": [
+ {"id": 1001, "name": "Наушники беспроводные Pro", "brand": "SoundX", "reviewRating": 4.8, "feedbacks": 12000,
+  "sizes": [{"price": {"basic": 499900, "product": 249900}}]},
+ {"id": 1002, "name": "Наушники TWS Lite", "brand": "Budget", "reviewRating": 4.6, "feedbacks": 3000,
+  "sizes": [{"price": {"basic": 199900, "product": 99900}}]},
+ {"id": 1003, "name": "Чехол для наушников", "brand": "Case", "reviewRating": 4.9, "feedbacks": 800,
+  "sizes": [{"price": {"basic": 19900, "product": 9900}}]},
+ {"id": 1004, "name": "Наушники премиум", "brand": "Lux", "reviewRating": 4.9, "feedbacks": 20,
+  "sizes": [{"price": {"basic": 1999900, "product": 1599900}}]},
+ {"id": 1005, "name": "Нет в наличии", "brand": "X", "reviewRating": 5, "feedbacks": 10, "sizes": [{}]},
+ {"id": 1006, "name": "Наушники плохие", "brand": "Bad", "reviewRating": 3.9, "feedbacks": 5000,
+  "salePriceU": 89000, "priceU": 150000}
+]}

@@ -1,0 +1,6 @@
+{
+ "widgetStates": {
+  "searchResultsV2-1234-default-1": "{\"items\": [{\"sku\": 555001, \"action\": {\"link\": \"/product/naushniki-aero-555001/?asb=1\"}, \"mainState\": [{\"type\": \"priceV2\", \"priceV2\": {\"price\": [{\"text\": \"1 890 ₽\", \"textStyle\": \"PRICE\"}, {\"text\": \"3 990 ₽\", \"textStyle\": \"ORIGINAL_PRICE\"}], \"discount\": \"−52%\"}}, {\"type\": \"textAtom\", \"id\": \"name\", \"textAtom\": {\"text\": \"Наушники беспроводные Aero\"}}, {\"type\": \"labelList\", \"labelList\": {\"items\": [{\"title\": \"4.7\"}, {\"title\": \"8 512 отзывов\"}, {\"title\": \"2 тыс. купили\"}]}}]}, {\"action\": {\"link\": \"/product/naushniki-bass-777002/\"}, \"mainState\": [{\"type\": \"priceV2\", \"priceV2\": {\"price\": [{\"text\": \"3 290 ₽\"}]}}, {\"type\": \"textAtom\", \"id\": \"name\", \"textAtom\": {\"text\": \"Наушники Bass Max\"}}, {\"type\": \"labelList\", \"labelList\": {\"items\": [{\"title\": \"4,9\"}, {\"title\": \"1 204 отзыва\"}]}}]}, {\"sku\": 999, \"action\": {\"link\": \"/product/x-999/\"}, \"mainState\": [{\"type\": \"textAtom\", \"id\": \"name\", \"textAtom\": {\"text\": \"Без цены\"}}]}]}",
+  "otherWidget-1": "{}"
+ }
+}
